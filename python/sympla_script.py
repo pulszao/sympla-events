@@ -1,3 +1,4 @@
+import json
 from time import sleep
 import requests as requests
 from bs4 import BeautifulSoup
@@ -16,7 +17,7 @@ div_place_class = 'EventLocalInfosstyle__Info-twjfn8-2'  # the city is in the la
 description_class = 'EventDescriptionstyle__Description-sc-1hmlyb8-0'
 
 
-def get_event_data(event_url: str):
+def get_event_data(event_url):
     if event_url is not None:
         response = requests.get(
             'https://www.sympla.com.br/evento/bulls-retro-israel-novaes/1884582',
@@ -34,13 +35,7 @@ def get_event_data(event_url: str):
 
         host_name = event_html.find_all('h2', {'class': host_name_class})[0].text.strip()
         host_name = host_name.normalize('NFD').replace(u'\u0300', '').encode('ascii', 'ignore').decode()
-
-        if host_name == 'Super Club Caxias':
-            host_name = 'Reffugio'
-        elif host_name == 'Super Club Caxias':
-            host_name = 'Super Club'
-        elif host_name == 'Tulipa Restaurante - Pavilhoes Festa da Uva':
-            host_name = 'Tulipa Restaurante'
+        host_name = get_place_title(host_name)
 
         evt_city = event_html.find_all('div', {'class': div_place_class})[0].find_all('p')[-1].text
 
@@ -87,6 +82,7 @@ def get_hour_formatted(hour):
 
 
 def get_month_day(month):
+    month = month.lower()
     if month == 'jan':
         return 1
     elif month == 'fev':
@@ -113,8 +109,21 @@ def get_month_day(month):
         return 12
 
 
+def get_place_title(host_name):
+    place_title = host_name
+
+    if host_name == 'Reffugio Bar':
+        place_title = 'Reffugio'
+    elif host_name == 'Super Club Caxias':
+        place_title = 'Super Club'
+    elif host_name == 'Tulipa Restaurante - Pavilhoes Festa da Uva':
+        place_title = 'Tulipa Restaurante'
+
+    return place_title
+
+
 def create_events(data):
-    response = requests.post(api_url, data=data)
+    response = requests.post(api_url, data=json.dumps(data))
     if response.status_code == 200:
         print(response.text)
         return True
@@ -123,8 +132,28 @@ def create_events(data):
         return False
 
 
-def create_basic_events(data):
-    response = requests.post(api_url, data=data)
+def create_basic_events(event):
+    title = event.attrs['title']
+    city = event.attrs['aria-label'].split(', ')[-2]
+    place = get_place_title(event.attrs['aria-label'].split(', ')[-3].replace('em ', ''))
+    date = event.text[5:19].split(' ')
+    day = date[0]
+    month = get_month_day(date[1])
+    hour = date[-1]
+    event_hour = {
+        'initial_date': f"2023-{month}-{day} {hour}",
+        'final_date': f"2023-{month}-{day} {hour}",
+    }
+
+    event_data = {
+        'title': title,
+        'host_name': 'ZERO54',
+        'city': city,
+        'description': '',
+        'hour': event_hour,
+    }
+
+    response = requests.post(api_url, data=json.dumps(event_data))
     if response.status_code == 200:
         print(response.text)
         return True
@@ -145,25 +174,9 @@ if __name__ == '__main__':
         for ev in events:
             sleep(5)
             link = ev.get('href')
-            # title = ev.attrs['title']
-            # city = ev.attrs['aria-label'].split(', ')[-2]
-            # palce = ev.attrs['aria-label'].split(', ')[-3].replace('em ', '')
-            # date = ev.text[5:19].split(' ')
-            # day = date[0]
-            # month = get_month_day(date[1])
-            # hour = date[-1]
 
             if link is not None:
-                get_event_data(link)
-                # create_basic_events({
-                #     'title': title,
-                #     'host_name': palce,
-                #     'city': city,
-                #     'description': '',
-                #     'hour': {
-                #         'initial_date': f"2023-{month}-{day} {hour}",
-                #         'final_date': f"2023-{month}-{day} {hour}",
-                #     },
-                # })
+                # get_event_data(link)
+                create_basic_events(ev)
     else:
         print('No events found')
